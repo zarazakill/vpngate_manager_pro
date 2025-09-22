@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VPNGate Pro">
+  <meta name="theme-color" content="#161b22">
+  <title>VPNGate Manager Pro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "app": "./app.js",
+      "vpngate": "./vpngate.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="background-overlay"></div>
+  <div class="layout">
+    <header class="app-header">
+      <h1 class="title">VPNGate Manager Pro</h1>
+      <p class="subtitle">Web-клиент для поиска и загрузки .ovpn конфигураций</p>
+
+      <div class="header-controls">
+        <div class="inline-controls">
+          <label class="inline" style="justify-content:flex-start; gap:8px;">
+            <span id="i18n-lang-label">Язык</span>
+            <select id="lang">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </div>
+        <button id="refresh" class="btn primary">Обновить список</button>
+        <button id="testAll" class="btn">Тестировать все</button>
+        <button id="stopTest" class="btn" style="display: none;">Остановить</button>
+        <div class="progress-wrap">
+          <progress id="progress" max="100" value="0"></progress>
+          <span id="status" class="status">Готово к работе</span>
+        </div>
+      </div>
+
+      <div class="settings">
+        <details class="advanced-settings">
+          <summary>Дополнительные источники</summary>
+          <div class="settings-content">
+            <label class="block">API URL:
+              <input id="apiUrl" type="text" value="https://download.vpngate.jp/api/iphone/">
+            </label>
+            <label class="block">Зеркала (CORS прокси):
+              <textarea id="proxies" rows="3" placeholder="Один URL в строке..."></textarea>
+            </label>
+            <label class="block">Потоки тестирования:
+              <input id="threads" type="number" min="1" max="20" value="5">
+            </label>
+            <label class="inline">
+              <span id="enableSourcesLabel">Использовать эти настройки</span>
+              <input id="enableSources" type="checkbox" checked>
+            </label>
+            <div class="actions">
+                <button id="saveSources" class="btn">Сохранить</button>
+                <button id="resetSources" class="btn subtle">Сбросить</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="main-content">
+        <div class="list-log-container">
+          <section class="servers-section">
+            <div class="table-header">
+              <h2 id="i18n-servers-list-header">Список серверов</h2>
+              <div class="filters">
+                <select id="countryFilter" title="Фильтр по стране">
+                  <option value="">Все страны</option>
+                </select>
+                <select id="statusFilter" title="Фильтр по статусу">
+                  <option value="all">Все</option>
+                  <option value="up">Доступные</option>
+                  <option value="down">Недоступные</option>
+                  <option value="untested">Непроверенные</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="servers-table">
+                <thead>
+                  <tr>
+                    <th class="status-col"></th>
+                    <th data-sort="country">Страна</th>
+                    <th data-sort="speed">Скорость ↓</th>
+                    <th data-sort="ping">Пинг ↑</th>
+                    <th data-sort="sessions">Сессии ↓</th>
+                    <th data-sort="score">Рейтинг ↓</th>
+                    <th data-sort="name">Имя хоста</th>
+                  </tr>
+                </thead>
+                <tbody id="serverList"></tbody>
+              </table>
+            </div>
+          </section>
+          <div class="card log-card">
+            <div class="log-head">
+              <h2 id="i18n-log-header">Лог операций</h2>
+              <button id="clearLog" class="btn subtle">Очистить</button>
+            </div>
+            <pre id="log" class="log"></pre>
+          </div>
+        </div>
+
+        <aside class="sidebar">
+          <div class="card info-card">
+            <h3 id="i18n-info-header">Информация о сервере</h3>
+            <button id="closeInfo" class="btn subtle mobile-only" aria-label="Закрыть">✕</button>
+            <pre id="info" class="info">Выберите сервер из списка</pre>
+            <div class="actions">
+              <button id="testSelected" class="btn" disabled>
+                <span class="btn-text">Тестировать</span>
+                <span class="spinner" style="display: none;"></span>
+              </button>
+              <button id="download" class="btn primary" disabled>Скачать .ovpn</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+    <div class="mobile-scrim"></div>
+  </div>
+  <script type="module">
+    import "app";
+  </script>
+</body>
+</html>
