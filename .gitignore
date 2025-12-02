@@ -4,9 +4,6 @@
 __pycache__/
 *.o
 *.obj
-dist/
-build/
-target/
 *.class
 *.exe
 *.dll
@@ -21,31 +18,28 @@ venv/
 .env
 .env.local
 .env.*
-.julia/
-zig*/
-.jdk/
-.gradle/
-.mypy_cache/
-.pytest_cache/
+
+# Build directories
+dist/
+build/
+target/
 coverage/
 htmlcov/
-.coverage
+.mypy_cache/
+.pytest_cache/
+.gradle/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-*.bak
-*.~*
-.DS_Store
-Thumbs.db
-
-# Editors
+# Editor/IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
 
 # Compressed files
 *.zip

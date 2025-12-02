@@ -293,6 +293,10 @@ let currentTest = null;
 let stopBatchTest = false;
 let currentSort = { key: 'speed', order: 'desc' };
 
+// Переменные для обработки свайпа на мобильных устройствах
+let touchStartX = 0;
+let touchEndX = 0;
+
 /* @tweakable default data sources when custom sources are disabled */
 const defaultConfig = {
   apiUrl: "https://download.vpngate.jp/api/iphone/",
@@ -335,7 +339,7 @@ const mobileButtonPad = { y: 8, x: 12 };
 /* @tweakable Mobile container paddings (layout/card/header in px) */
 const mobilePaddings = { layout: 8, card: 12, headerGap: 12 };
 /* @tweakable Hide "Test all" button on very small screens (<=576px) to simplify mobile UI */
-const hideTestAllOnMobile = true;
+const hideTestAllOnMobile = false; // Changed to false to ensure all functions are available on mobile
 
 let vpnService = null;
 let isVpnPluginAvailable = false;
@@ -455,7 +459,24 @@ function renderList() {
     }
 
 
-    tr.addEventListener("click", () => selectIndex(idx));
+    // Улучшенная обработка кликов для мобильных устройств
+    tr.addEventListener("click", (e) => {
+      // Проверяем, не был ли клик по кнопке внутри строки
+      if (!e.target.closest('button')) {
+        selectIndex(idx);
+      }
+    });
+    
+    // Добавляем обработку свайпа для открытия/закрытия деталей (для мобильных устройств)
+    tr.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    
+    tr.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe(tr, idx);
+    }, { passive: true });
+    
     fragment.appendChild(tr);
     fragment.appendChild(detailsRow);
   });
@@ -466,6 +487,23 @@ function renderList() {
 function updateInfo() {
   // This function is now a no-op as the info panel is removed.
   // The logic is handled directly within renderList().
+}
+
+function handleSwipe(element, idx) {
+  const swipeThreshold = 50; // Порог свайпа в пикселях
+  const diff = touchStartX - touchEndX;
+
+  if (Math.abs(diff) > swipeThreshold) {
+    if (diff > 0) {
+      // Свайп влево - закрытие деталей или смена выделения
+      if (selectedIndex === idx) {
+        selectIndex(-1); // Снимаем выделение
+      }
+    } else {
+      // Свайп вправо - открытие деталей
+      selectIndex(idx);
+    }
+  }
 }
 
 function selectIndex(idx) {
@@ -829,6 +867,24 @@ function updateConnectionStatusUI() {
             connectBtn.disabled = false;
         }
         downloadBtn.disabled = false;
+    }
+    
+    // Добавляем улучшенное мобильное взаимодействие
+    if (detailsRow && window.matchMedia('(max-width: 768px)').matches) {
+        // Делаем элементы управления более доступными на мобильных устройствах
+        const actionButtons = detailsRow.querySelectorAll('.actions .btn');
+        actionButtons.forEach(btn => {
+            btn.setAttribute('role', 'button');
+            btn.setAttribute('tabindex', '0');
+            
+            // Обработка клавиатурных событий для доступности
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    btn.click();
+                }
+            });
+        });
     }
 }
 

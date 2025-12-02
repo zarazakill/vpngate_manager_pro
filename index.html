@@ -34,9 +34,13 @@
         </div>
 
         <div class="header-controls">
-          <button id="refresh" class="btn primary">Обновить список</button>
-          <button id="testAll" class="btn">Тестировать все</button>
-          <button id="stopTest" class="btn" style="display: none;">Остановить</button>
+          <div class="mobile-controls">
+            <button id="refresh" class="btn primary">Обновить список</button>
+            <div class="mobile-test-controls">
+              <button id="testAll" class="btn">Тестировать все</button>
+              <button id="stopTest" class="btn" style="display: none;">Остановить</button>
+            </div>
+          </div>
           <div class="progress-wrap">
             <progress id="progress" max="100" value="0"></progress>
             <span id="status" class="status">Готово к работе</span>
