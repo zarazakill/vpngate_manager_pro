@@ -25,7 +25,7 @@ body {
   font-family: "Noto Sans", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   background-color: var(--bg-dark);
   color: var(--fg);
-  overflow: hidden;
+  overflow: auto; /* Allow scrolling when needed */
 }
 
 .background-overlay {
@@ -134,6 +134,7 @@ body {
 .table-container {
     overflow-y: auto;
     flex-grow: 1;
+    -webkit-overflow-scrolling: touch; /* Enable momentum scrolling on iOS */
 }
 .table-container::-webkit-scrollbar { width: 6px; }
 .table-container::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 3px; }
@@ -234,6 +235,7 @@ body {
   line-height: 1.6;
   white-space: pre;
   color: var(--fg);
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling on iOS */
 }
 
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: auto; padding-top: 16px; }
@@ -267,6 +269,7 @@ body {
   border: 1px solid var(--border);
   white-space: pre-wrap;
   word-break: break-all;
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling on iOS */
 }
 .log::-webkit-scrollbar { width: 6px; }
 .log::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 3px; }
@@ -415,19 +418,22 @@ label.block { display:flex; flex-direction:column; gap:6px; }
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
-    overflow: hidden; /* Keep it from scrolling */
+    overflow: auto; /* Allow scrolling */
+    height: auto;
+    min-height: 100vh;
   }
   .app-header {
-    max-height: 45vh; /* Allow some scroll */
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
   .container {
-    height: 100%;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
   }
   .main-content {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
+    overflow: visible;
   }
   .sidebar {
     position: fixed;
@@ -451,7 +457,7 @@ label.block { display:flex; flex-direction:column; gap:6px; }
   .mobile-scrim {
     display: block;
   }
-  .mobile-only { display: none; }
+  .mobile-only { display: initial !important; }
 }
 
 @media (max-width: 576px) {
@@ -472,8 +478,36 @@ label.block { display:flex; flex-direction:column; gap:6px; }
     flex-direction: column;
     align-items: flex-end;
   }
-  .servers-table td { padding: 14px 10px; }
+  .servers-table {
+    font-size: 12px; /* Make text smaller on small screens */
+  }
+  .servers-table th,
+  .servers-table td { 
+    padding: 8px 5px; /* Reduce padding */
+    min-width: 0;
+  }
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .filters {
+    width: 100%;
+  }
   .background-overlay { display: none; }
+  
+  /* Adjust table to be scrollable horizontally */
+  .table-container {
+    overflow-x: auto;
+  }
+  .servers-table {
+    min-width: 600px; /* Ensure table has minimum width to show all columns */
+  }
 }
 
 .mobile-only { display: none; }
+
+/* Utility class for hiding elements on mobile if needed */
+@media (max-width: 768px) {
+  .hidden-for-mobile { display: none !important; }
+}

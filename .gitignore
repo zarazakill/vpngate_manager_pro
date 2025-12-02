@@ -1,24 +1,51 @@
-```
-# Configuration and system files
-*.ovpn
+```gitignore
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+target/
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Dependencies
+node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
+.julia/
+zig*/
+.jdk/
+.gradle/
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+.coverage
+
+# Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
+*.bak
+*.~*
+.DS_Store
+Thumbs.db
 
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Editor/IDE files
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS files
-.DS_Store
-Thumbs.db
 
 # Compressed files
 *.zip
