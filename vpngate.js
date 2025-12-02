@@ -274,11 +274,12 @@ auth-user-pass
 # Дополнительные настройки
 connect-retry-max 3
 connect-retry 5
-resolv-retry 10
+resolv-retry 60
 auth-retry none
-ping 10
-ping-exit 60
-ping-restart 30
+ping 15
+ping-exit 180
+ping-restart 120
+ping-timer-rem
 float
 script-security 2`;
     }
