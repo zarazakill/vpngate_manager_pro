@@ -266,6 +266,18 @@ body.has-backdrop .background-overlay {
   color: var(--muted);
 }
 
+.mobile-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-test-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .sidebar {
     display: flex;
     flex-direction: column;
@@ -533,18 +545,46 @@ label.block { display:flex; flex-direction:column; gap:6px; }
   .servers-table th:last-child {
     display: none;
   }
+  
+  /* Mobile-friendly table adjustments */
+  .servers-table th,
+  .servers-table td {
+    padding: 8px 6px;
+    font-size: 13px;
+  }
+  
+  /* Mobile navigation adjustments */
+  .header-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .page-nav {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
-
 @media (max-width: 576px) {
-  .layout { padding: var(--layout-pad-mobile, 8px); gap: 8px; height: 100vh; overflow: hidden; }
-  body { overflow: hidden; }
-  .app-header, .card, .servers-section { padding: 12px; }
+  .layout { 
+    padding: var(--layout-pad-mobile, 8px); 
+    gap: 8px; 
+    height: 100vh; 
+    overflow: hidden; 
+  }
+  body { 
+    overflow: hidden; 
+    font-size: 14px; /* compact base font on very small screens */
+  }
+  .app-header, .card, .servers-section { 
+    padding: 12px; 
+  }
 
   .header-top {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: stretch;
+    gap: 12px;
   }
   .page-nav {
     width: 100%;
@@ -559,17 +599,149 @@ label.block { display:flex; flex-direction:column; gap:6px; }
   .header-controls .progress-wrap {
     width: 100%;
   }
-
+  
+  .mobile-test-controls {
+    flex-direction: row;
+    width: 100%;
+  }
+  
+  .mobile-test-controls .btn {
+    flex: 1;
+    min-width: 40%;
+  }
+  
+  /* Mobile-friendly button adjustments */
+  .btn {
+    padding: var(--btn-pad-y, 12px) var(--btn-pad-x, 16px);
+    font-size: 14px;
+  }
+  
+  /* Adjust table for mobile */
   .servers-section {
     height: 100%;
+    overflow: hidden;
   }
   .table-container {
     flex-grow: 1;
     overflow-y: auto;
   }
+  
+  .servers-table th,
+  .servers-table td {
+    padding: 6px 4px;
+    font-size: 12px;
+  }
+  
+  /* Mobile-friendly progress bar */
+  .progress-wrap {
+    width: 100%;
+  }
+  
+  /* Mobile-friendly form elements */
+  select, input[type="number"], input[type="text"], textarea {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  
+  /* Adjust page container for mobile */
+  .page-container { 
+    padding: 16px 10px; 
+    max-width: 100%;
+  }
+  
+  /* Mobile-friendly settings layout */
+  .settings-page .setting-group {
+    padding: 16px;
+  }
+  
+  /* Mobile-friendly log view */
+  .log {
+    font-size: 11px;
+    padding: 8px;
+  }
+}
 
-  .page-container { padding: 16px 10px; }
-  body { font-size: 14px; } /* compact base font on very small screens */
+/* Extra small screens */
+@media (max-width: 425px) {
+  .layout { 
+    padding: 6px; 
+    gap: 6px; 
+  }
+  
+  .header-top {
+    gap: 8px;
+  }
+  
+  .header-controls {
+    gap: 6px;
+  }
+  
+  .btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  
+  .servers-table th,
+  .servers-table td {
+    padding: 4px 2px;
+    font-size: 11px;
+  }
+  
+  .title {
+    font-size: 20px;
+  }
+  
+  .subtitle {
+    font-size: 12px;
+  }
+  
+  .app-header, .card, .servers-section { 
+    padding: 8px; 
+  }
+  
+  .settings-page .setting-group {
+    padding: 12px;
+  }
+  
+  /* Make sure mobile buttons are large enough for touch */
+  .btn {
+    min-height: 44px; /* Minimum touch target size */
+    min-width: 44px;
+  }
+  
+  /* Adjust table container for very small screens */
+  .table-container {
+    overflow-x: auto;
+  }
+  
+  /* Mobile-friendly table header */
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .filters {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+  
+  .servers-table tbody tr {
+    min-height: 44px;
+  }
+  
+  select, input[type="number"], input[type="text"], textarea {
+    min-height: 44px;
+  }
 }
 
 body.compact {
