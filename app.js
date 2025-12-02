@@ -307,6 +307,13 @@ function updateInfo() {
   if (window.innerWidth <= 768) {
     dom.sidebar.classList.add('visible');
     dom.mobileScrim.classList.add('visible');
+    
+    // Scroll to the selected server in the table if it's not visible
+    const selectedRow = document.querySelector('.servers-table tbody tr.selected');
+    if (selectedRow) {
+      // Use smooth scrolling to bring the selected row into view
+      selectedRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 }
 
@@ -653,6 +660,19 @@ function bindEvents() {
   els.download.addEventListener("click", downloadSelected);
   els.testSelected.addEventListener("click", testSelectedServer);
   els.testAll.addEventListener("click", testAllServers);
+  
+  // Handle window resize to adjust mobile layout
+  window.addEventListener('resize', () => {
+    // If we're switching from mobile to desktop view, ensure sidebar is visible
+    if (window.innerWidth > 768) {
+      dom.sidebar.classList.remove('visible');
+      dom.mobileScrim.classList.remove('visible');
+    } else if (selectedIndex >= 0 && !dom.sidebar.classList.contains('visible')) {
+      // If we're on mobile and sidebar was hidden, show it if needed
+      dom.sidebar.classList.add('visible');
+      dom.mobileScrim.classList.add('visible');
+    }
+  });
   els.stopTest.addEventListener('click', () => {
     stopBatchTest = true;
     if (currentTest) {
