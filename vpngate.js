@@ -1,11 +1,20 @@
+/* @tweakable Fetch timeout in milliseconds */
+const FETCH_TIMEOUT_MS = 15000;
+
+/* @tweakable Custom compression directive added to configurations for manual downloads (e.g., 'comp-lzo no' or '') */
+const downloadCompressionDirective = ''; // Set to empty string to prevent injection of 'comp-lzo' which caused error 42.
+
+/* @tweakable Real OpenVPN test timeout in seconds */
+const OPENVPN_TEST_TIMEOUT = 15;
+
 let API_URL = "https://download.vpngate.jp/api/iphone/";
 let PROXIES = [
   "", // Прямой запрос (часто блокируется CORS)
   "https://api.allorigins.win/raw?url=", // Надежный прокси
-  "https://thingproxy.freeboard.io/fetch/", // Альтернативный прокси
-  "https://r.jina.ai/", // Умный прокси
-  "https://corsproxy.io/?", // The user provided ?q= but the original code seems to handle this, I will stick with the original which is more robust.
-  "https://api.codetabs.com/v1/proxy?quest=", // Еще один рабочий вариант
+"https://thingproxy.freeboard.io/fetch/", // Альтернативный прокси
+"https://r.jina.ai/", // Умный прокси
+"https://corsproxy.io/?", // The user provided ?q= but the original code seems to handle this, I will stick with the original which is more robust.
+"https://api.codetabs.com/v1/proxy?quest=", // Еще один рабочий вариант
 ];
 
 // WebRTC for testing connection (emulation)
@@ -33,7 +42,7 @@ class WebRTCConnectionTester {
         }
         return false;
       };
-      
+
       const doResult = (success, reasonKey, ping = 999) => resolve({ success, reasonKey, ping });
 
       this.timeoutId = setTimeout(() => {
@@ -55,7 +64,7 @@ class WebRTCConnectionTester {
       // For TCP, we attempt a connection
       const ws = new WebSocket(`ws://${this.ip}:${this.port}`);
       const startTime = performance.now();
-      
+
       ws.onopen = () => {
         if (handleCancellation()) return;
         ws.close();
@@ -73,27 +82,127 @@ class WebRTCConnectionTester {
   }
 }
 
+// Real OpenVPN connection tester
+class OpenVPNConnectionTester {
+  constructor(configBase64, timeout = OPENVPN_TEST_TIMEOUT) {
+    this.configBase64 = configBase64;
+    this.timeout = timeout * 1000;
+    this.cancelled = false;
+    this.timeoutId = null;
+    this.vpnService = null;
+  }
+
+  cancel() {
+    this.cancelled = true;
+    if (this.timeoutId) clearTimeout(this.timeoutId);
+    if (this.vpnService) {
+      this.vpnService.disconnect().catch(() => {});
+    }
+  }
+
+  async test() {
+    return new Promise(async (resolve, reject) => {
+      if (this.cancelled) {
+        return reject(new Error("Cancelled"));
+      }
+
+      try {
+        // Создаем временный сервис для тестирования
+        this.vpnService = new (await import('./openvpn-service.js')).OpenVPNService();
+        const initialized = await this.vpnService.initialize();
+
+        if (!initialized) {
+          return resolve({
+            success: false,
+            reasonKey: 'no_plugin',
+            ping: 999
+          });
+        }
+
+        let connectionEstablished = false;
+        let testStartTime = Date.now();
+
+        // Обработчик статуса для определения успешного подключения
+        const statusHandler = (event) => {
+          const { status } = event.detail;
+
+          if (status === 'connected') {
+            connectionEstablished = true;
+            const ping = Date.now() - testStartTime;
+
+            // Немедленно отключаемся после успешного подключения
+            this.vpnService.disconnect().finally(() => {
+              document.removeEventListener('vpnConnectionStatus', statusHandler);
+              clearTimeout(this.timeoutId);
+              resolve({
+                success: true,
+                reasonKey: 'openvpn_connected',
+                ping: Math.min(ping, 999)
+              });
+            });
+          } else if (status === 'error' || status === 'disconnected') {
+            if (!connectionEstablished) {
+              document.removeEventListener('vpnConnectionStatus', statusHandler);
+              clearTimeout(this.timeoutId);
+              resolve({
+                success: false,
+                reasonKey: 'openvpn_failed',
+                ping: 999
+              });
+            }
+          }
+        };
+
+        document.addEventListener('vpnConnectionStatus', statusHandler);
+
+        // Таймаут для теста
+        this.timeoutId = setTimeout(() => {
+          if (this.cancelled) return;
+          document.removeEventListener('vpnConnectionStatus', statusHandler);
+          this.vpnService.disconnect().catch(() => {});
+          resolve({
+            success: false,
+            reasonKey: 'openvpn_timeout',
+            ping: 999
+          });
+        }, this.timeout);
+
+        // Запускаем тестовое подключение
+        await this.vpnService.connect(this.configBase64, 'test-connection');
+
+      } catch (error) {
+        clearTimeout(this.timeoutId);
+        resolve({
+          success: false,
+          reasonKey: 'openvpn_error',
+          ping: 999
+        });
+      }
+    });
+  }
+}
+
 async function getTextWithFallback(url) {
   let lastErr;
   // Добавляем пустую строку в начало для прямого запроса
-  const allSources = [...PROXIES]; 
+  const allSources = [...PROXIES];
 
   for (const p of allSources) {
     try {
       const fullUrl = p ? p + (p.includes('?') ? encodeURIComponent(url) : url) : url;
-      
+
       console.log("Trying:", fullUrl);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       const res = await fetch(fullUrl, { cache: "no-store", signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       if (text && text.length > 100 && !text.toLowerCase().includes("error")) {
-         console.log(`Success with: ${p || 'direct'}`);
-         return text;
+        console.log(`Success with: ${p || 'direct'}`);
+        return text;
       }
       throw new Error("Invalid or empty response");
     } catch (e) {
@@ -125,8 +234,8 @@ export async function fetchServers(onProgress) {
     const lines = text.split("\n");
     const rows = [];
     const dataLines = lines.filter(l => {
-        const trimmed = l.trim();
-        return trimmed && !trimmed.startsWith('*') && !trimmed.startsWith('#');
+      const trimmed = l.trim();
+      return trimmed && !trimmed.startsWith('*') && !trimmed.startsWith('#');
     });
     const total = dataLines.length || 1;
     let processed = 0;
@@ -143,31 +252,31 @@ export async function fetchServers(onProgress) {
         country_long, sessions, uptime, total_users, total_traffic, , , ,
         ovpn_config_base64
       ] = parts;
-      
+
       const sanitizedHostname = (hostname || "").replace(/[^a-zA-Z0-9.-]/g, '_');
       const sanitizedCountryShort = (country_short || "").trim().replace(/\s/g, '_');
       const server_name = `${sanitizedHostname}_${sanitizedCountryShort}`;
       const filename = `${server_name}.ovpn`;
       const { proto, port } = parseProtoPortFromConfig(ovpn_config_base64);
-      
+
       rows.push({
         name: server_name,
         filename,
         config_base64: ovpn_config_base64,
         country: country_long.trim(),
-        country_short: country_short.trim(),
-        ip: ip || "N/A",
-        score: Number(score) || 0,
-        ping: Number(ping) || 999,
-        speed_mbps: Math.round((Number(speed_bps) / 1_000_000)),
-        sessions: Number(sessions) || 0,
-        uptime: uptime || "N/A",
-        tested: false,
-        available: null,
-        test_ping: 999,
-        proto,
-        port,
-        testing: false,
+                country_short: country_short.trim(),
+                ip: ip || "N/A",
+                score: Number(score) || 0,
+                ping: Number(ping) || 999,
+                speed_mbps: Math.round((Number(speed_bps) / 1_000_000)),
+                sessions: Number(sessions) || 0,
+                uptime: uptime || "N/A",
+                tested: false,
+                available: null,
+                test_ping: 999,
+                proto,
+                port,
+                testing: false,
       });
       processed++;
       onProgress?.(Math.min(100, Math.round(processed/total*100)));
@@ -182,49 +291,48 @@ export async function fetchServers(onProgress) {
 
 export function buildInfo(server, t) {
   const status_key = server.tested
-    ? (server.available ? 'status_available' : 'status_unavailable')
-    : 'status_untested';
+  ? (server.available ? 'status_available' : 'status_unavailable')
+  : 'status_untested';
   const status_info = t(status_key);
 
   const ping_info = server.tested ? `\n${t('info_real_ping')}: ${server.test_ping}ms` : "";
-  
+
   let quality_info = "";
   if (server.tested && server.available) {
-      if (server.test_ping < 100) quality_info = ` (${t('quality_excellent')})`;
-      else if (server.test_ping < 200) quality_info = ` (${t('quality_good')})`;
-      else quality_info = ` (${t('quality_slow')})`;
+    if (server.test_ping < 100) quality_info = ` (${t('quality_excellent')})`;
+    else if (server.test_ping < 200) quality_info = ` (${t('quality_good')})`;
+    else quality_info = ` (${t('quality_slow')})`;
   }
-  
+
   return `${t('info_server')}: ${server.name}
-${t('info_country')}: ${server.country}
-${t('info_ip')}: ${server.ip}
-${t('info_proto')}: ${server.proto}/${server.port}
-${t('info_speed')}: ${server.speed_mbps} Mbps
-${t('info_score')}: ${server.score}
-${t('info_ping_base')}: ${server.ping}ms${ping_info}${quality_info}
-${t('info_status')}: ${status_info}`;
+  ${t('info_country')}: ${server.country}
+  ${t('info_ip')}: ${server.ip} (${server.proto.toUpperCase()}/${server.port})
+  ${t('info_speed')}: ${server.speed_mbps} Mbps
+  ${t('info_score')}: ${server.score}
+  ${t('info_ping_base')}: ${server.ping}ms${ping_info}${quality_info}
+  ${t('info_status')}: ${status_info}`;
 }
 
 export function sortServers(servers, key, order) {
   const copy = [...servers];
   const collator = new Intl.Collator();
-  
+
   copy.sort((a, b) => {
     let valA, valB;
     if (key === 'ping') {
-        valA = a.tested ? a.test_ping : a.ping;
-        valB = b.tested ? b.test_ping : b.ping;
+      valA = a.tested ? a.test_ping : a.ping;
+      valB = b.tested ? b.test_ping : b.ping;
     } else {
-        valA = a[key];
-        valB = b[key];
+      valA = a[key];
+      valB = b[key];
     }
-    
+
     if (typeof valA === 'string') {
-        return order === 'asc' ? collator.compare(valA, valB) : collator.compare(valB, valA);
+      return order === 'asc' ? collator.compare(valA, valB) : collator.compare(valB, valA);
     }
     return order === 'asc' ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
   });
-  
+
   return copy;
 }
 
@@ -261,27 +369,37 @@ export function prepareConfigText(base64Text) {
     // запросят имя пользователя и пароль.
     if (!content.includes("auth-user-pass")) {
       content += `
-# --- VPNGate Manager Pro ---
-# Стандартные учетные данные для VPNGate:
-# Имя пользователя: vpn
-# Пароль: vpn
-auth-user-pass
-# -------------------------`;
+      # --- VPNGate Manager Pro ---
+      # Стандартные учетные данные для VPNGate:
+      # Имя пользователя: vpn
+      # Пароль: vpn
+      auth-user-pass
+      # -------------------------`;
     }
     // Дополнительные настройки для стабильности
     if (!content.includes("script-security")) {
       content += `
-# Дополнительные настройки
-connect-retry-max 3
-connect-retry 5
-resolv-retry 60
-auth-retry none
-ping 15
-ping-exit 180
-ping-restart 120
-ping-timer-rem
-float
-script-security 2`;
+      # Дополнительные настройки и оптимизации для мобильных
+      connect-retry-max 3
+      connect-retry 5
+      resolv-retry 10
+      auth-retry none
+      ping 10
+      ping-exit 60
+      ping-restart 30
+      float
+      script-security 2
+      persist-tun
+      persist-key
+      nobind`;
+      // Inject custom compression if specified
+      if (downloadCompressionDirective) {
+        content += `\n${downloadCompressionDirective}`;
+      }
+      content += `
+      tun-mtu 1500
+      mssfix 1450
+      reneg-sec 0`;
     }
     return content;
   } catch (error) {
@@ -307,7 +425,13 @@ export function downloadTextFile(filename, text) {
   }
 }
 
-export function testServerConnection(ip, port = 1194, proto = 'udp', timeout = 10) {
+// Объединенная функция тестирования сервера
+export function testServerConnection(ip, port = 1194, proto = 'udp', timeout = 10, configBase64 = null) {
+  // Если есть конфиг, используем реальное OpenVPN тестирование
+  if (configBase64) {
+    return new OpenVPNConnectionTester(configBase64, OPENVPN_TEST_TIMEOUT);
+  }
+  // Иначе используем старый метод проверки порта
   return new WebRTCConnectionTester(ip, port, proto, timeout);
 }
 

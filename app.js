@@ -9,25 +9,39 @@ import {
   getConfig,
   testServerConnection
 } from "./vpngate.js";
+import { OpenVPNService } from "./openvpn-service.js";
+
+/* @tweakable Base URL for fetching country flags. Use {CODE} placeholder for 2-letter country code. Example: 'https://flagcdn.com/h40/{CODE}.png' */
+const FLAG_BASE_URL_TEMPLATE = "https://flagcdn.com/h40/{CODE}.png";
 
 const els = {
+  // Views
+  mainView: document.getElementById("main-view"),
+  settingsView: document.getElementById("settings-view"),
+  logView: document.getElementById("log-view"),
+  
+  // Navigation
+  navSettings: document.getElementById("nav-settings"),
+  navLogs: document.getElementById("nav-logs"),
+  backBtns: document.querySelectorAll(".back-btn"),
+
+  // Main page elements
   title: document.querySelector(".title"),
   refresh: document.getElementById("refresh"),
   testAll: document.getElementById("testAll"),
   stopTest: document.getElementById("stopTest"),
-  download: document.getElementById("download"),
-  testSelected: document.getElementById("testSelected"),
   
   countryFilter: document.getElementById("countryFilter"),
   statusFilter: document.getElementById("statusFilter"),
   
   serverList: document.getElementById("serverList"),
-  info: document.getElementById("info"),
   progress: document.getElementById("progress"),
   status: document.getElementById("status"),
   log: document.getElementById("log"),
   clearLog: document.getElementById("clearLog"),
   
+  // Settings page elements
+  lang: document.getElementById("lang"),
   apiUrl: document.getElementById("apiUrl"),
   proxies: document.getElementById("proxies"),
   saveSources: document.getElementById("saveSources"),
@@ -40,12 +54,6 @@ const els = {
   tableHeaders: document.querySelectorAll(".servers-table th[data-sort]"),
 };
 
-const dom = {
-  ...els,
-  sidebar: document.querySelector('.sidebar'),
-  mobileScrim: document.querySelector('.mobile-scrim'),
-};
-
 const i18n = {
   ru: {
     title: "VPNGate Manager Pro",
@@ -54,7 +62,17 @@ const i18n = {
     btnTestAll: "Тестировать все",
     btnStop: "Остановить",
     ready: "Готово к работе",
-    settingsSources: "Дополнительные источники",
+    
+    // Navigation
+    navLogs: "Лог",
+    navSettings: "Настройки",
+    btnBack: "Назад",
+
+    // Settings page
+    settingsTitle: "Настройки",
+    settingsGeneral: "Общие",
+    settingsSources: "Источники данных",
+    enableSources: "Использовать пользовательские источники",
     apiUrl: "API URL:",
     mirrors: "Зеркала (CORS прокси):",
     threads: "Потоки тестирования:",
@@ -76,12 +94,22 @@ const i18n = {
     clearLog: "Очистить",
     infoTitle: "Информация о сервере",
     btnTest: "Тестировать",
-    btnDownload: "Скачать .ovpn",
+    btnConnect: "Подключиться",
+    btnDownload: "Скачать конфиг",
     selectServer: "Выберите сервер из списка",
     emptyList: "Нет серверов для отображения",
     langLabel: "Язык",
     loadedSummary: (total, available) => `Загружено ${total} серверов (${available} доступно)`,
-    enableSources: "Использовать эти настройки",
+    
+    // Connection simulation
+    btnDisconnect: "Отключиться",
+    statusConnecting: "Подключение...",
+    statusConnected: "Подключено. Защищено.",
+    statusDisconnected: "Отключено",
+    statusConnError: "Ошибка подключения",
+    statusReconnecting: "Переподключение...",
+    statusAuth: "Аутентификация...",
+    
     statusLoading: "Загрузка списка серверов...",
     statusLoaded: (n) => `Загружено ${n} серверов`,
     statusError: "Ошибка загрузки",
@@ -102,6 +130,10 @@ const i18n = {
     logConfigSaved: (filename) => `💾 Файл сохранен: ${filename}`,
     logSourcesUpdated: "🔧 Источники данных обновлены. Обновите список серверов.",
     logSourcesReset: "↩ Источники сброшены к значениям по умолчанию.",
+    logVpnConnecting: (name) => `🔌 Попытка подключения к ${name}...`,
+    logVpnLog: (level, msg) => `[VPN-${level.toUpperCase()}] ${msg}`,
+    logVpnStatus: (status) => `ℹ️ Статус VPN: ${status}`,
+    logVpnPluginUnavailable: "⚠️ OpenVPN плагин не найден. Прямое подключение недоступно, будет скачан файл конфигурации.",
     test_available: "Доступен",
     test_available_udp: "Доступен (UDP, проверка ограничена)",
     test_unavailable: "Недоступен",
@@ -127,7 +159,13 @@ const i18n = {
     tooltip_available: (ping) => `Доступен (${ping}ms)`,
     tooltip_available_slow: (ping) => `Доступен, высокий пинг (${ping}ms)`,
     tooltip_unavailable: "Недоступен",
-    close: "Закрыть",
+
+    test_openvpn_connected: "OpenVPN подключение успешно",
+    test_openvpn_failed: "OpenVPN подключение не удалось",
+    test_openvpn_timeout: "Таймаут OpenVPN подключения",
+    test_openvpn_error: "Ошибка OpenVPN",
+    test_no_plugin: "Плагин OpenVPN недоступен",
+    status_testing_openvpn: "Тестирование OpenVPN подключения..."
   },
   en: {
     title: "VPNGate Manager Pro",
@@ -136,7 +174,17 @@ const i18n = {
     btnTestAll: "Test all",
     btnStop: "Stop",
     ready: "Ready",
-    settingsSources: "Additional sources",
+
+    // Navigation
+    navLogs: "Logs",
+    navSettings: "Settings",
+    btnBack: "Back",
+
+    // Settings page
+    settingsTitle: "Settings",
+    settingsGeneral: "General",
+    settingsSources: "Data Sources",
+    enableSources: "Use custom sources",
     apiUrl: "API URL:",
     mirrors: "Mirrors (CORS proxies):",
     threads: "Testing threads:",
@@ -158,12 +206,22 @@ const i18n = {
     clearLog: "Clear",
     infoTitle: "Server info",
     btnTest: "Test",
-    btnDownload: "Download .ovpn",
+    btnConnect: "Connect",
+    btnDownload: "Download config",
     selectServer: "Select a server from the list",
     emptyList: "No servers to display",
     langLabel: "Language",
     loadedSummary: (total, available) => `Loaded ${total} servers (${available} available)`,
-    enableSources: "Enable this section",
+    
+    // Connection simulation
+    btnDisconnect: "Disconnect",
+    statusConnecting: "Connecting...",
+    statusConnected: "Connected. You are secure.",
+    statusDisconnected: "Disconnected",
+    statusConnError: "Connection Error",
+    statusReconnecting: "Reconnecting...",
+    statusAuth: "Authenticating...",
+
     statusLoading: "Loading server list...",
     statusLoaded: (n) => `Loaded ${n} servers`,
     statusError: "Load error",
@@ -184,6 +242,10 @@ const i18n = {
     logConfigSaved: (filename) => `💾 File saved: ${filename}`,
     logSourcesUpdated: "🔧 Data sources updated. Please refresh the server list.",
     logSourcesReset: "↩ Sources reset to default values.",
+    logVpnConnecting: (name) => `🔌 Attempting to connect to ${name}...`,
+    logVpnLog: (level, msg) => `[VPN-${level.toUpperCase()}] ${msg}`,
+    logVpnStatus: (status) => `ℹ️ VPN Status: ${status}`,
+    logVpnPluginUnavailable: "⚠️ OpenVPN plugin not found. Direct connection unavailable, will download config file instead.",
     test_available: "Available",
     test_available_udp: "Available (UDP, limited check)",
     test_unavailable: "Unavailable",
@@ -209,7 +271,13 @@ const i18n = {
     tooltip_available: (ping) => `Available (${ping}ms)`,
     tooltip_available_slow: (ping) => `Available, high ping (${ping}ms)`,
     tooltip_unavailable: "Unavailable",
-    close: "Close",
+
+    test_openvpn_connected: "OpenVPN connection successful",
+    test_openvpn_failed: "OpenVPN connection failed",
+    test_openvpn_timeout: "OpenVPN connection timeout",
+    test_openvpn_error: "OpenVPN error",
+    test_no_plugin: "OpenVPN plugin unavailable",
+    status_testing_openvpn: "Testing OpenVPN connection..."
   }
 };
 let currentLang = 'ru';
@@ -224,6 +292,64 @@ let selectedIndex = -1;
 let currentTest = null;
 let stopBatchTest = false;
 let currentSort = { key: 'speed', order: 'desc' };
+
+/* @tweakable default data sources when custom sources are disabled */
+const defaultConfig = {
+  apiUrl: "https://download.vpngate.jp/api/iphone/",
+  proxies: ["https://api.allorigins.win/raw?url=", "https://corsproxy.io/?", "https://r.jina.ai/"]
+};
+
+/* @tweakable per-server test timeout in seconds */
+const testTimeoutSeconds = 10;
+
+/* @tweakable Enable a subtle backdrop image behind the UI */
+const enableBackdrop = false;
+/* @tweakable Use compact mode to reduce paddings and font sizes */
+const enableCompactMode = true;
+/* @tweakable Corner radius in pixels for cards and containers */
+const uiRadiusPx = 14;
+/* @tweakable Card translucency (0.6–0.95 recommended) */
+const uiCardAlpha = 0.75;
+/* @tweakable Animation duration for micro-interactions (ms) */
+const uiAnimFastMs = 180;
+
+/* @tweakable Global compact scale multiplier (affects titles, table fonts, paddings) */
+const compactScale = 0.92;
+/* @tweakable Extra compact scale applied on small screens (<=576px) */
+const mobileExtraCompactScale = 0.9;
+/* @tweakable Table cell padding in compact mode (px) */
+const compactCellPaddingPx = 6;
+
+/* @tweakable Enable extra-compact layout when screen <= 576px */
+const mobileCompactEnabled = true;
+/* @tweakable Hide subtitle on very small screens */
+const mobileHideSubtitle = true;
+/* @tweakable Mobile font scale (applies when <= 576px) */
+const mobileFontScale = 0.85;
+/* @tweakable Mobile table cell padding (px) */
+const mobileCellPadPx = 5;
+/* @tweakable Mobile flag icon width (px) */
+const mobileFlagPx = 16;
+/* @tweakable Mobile button vertical/horizontal padding (px) */
+const mobileButtonPad = { y: 8, x: 12 };
+/* @tweakable Mobile container paddings (layout/card/header in px) */
+const mobilePaddings = { layout: 8, card: 12, headerGap: 12 };
+/* @tweakable Hide "Test all" button on very small screens (<=576px) to simplify mobile UI */
+const hideTestAllOnMobile = true;
+
+let vpnService = null;
+let isVpnPluginAvailable = false;
+
+let connectedState = {
+    serverName: null,
+    status: 'disconnected', // 'disconnected', 'connecting', 'connected', 'error', 'reconnecting', 'auth'
+    timer: null,
+};
+
+function navigate(viewId) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(viewId)?.classList.add('active');
+}
 
 function log(msg) {
   const t = new Date().toLocaleTimeString();
@@ -242,7 +368,7 @@ function setStatus(txt) {
 function renderList() {
   els.serverList.innerHTML = "";
   if (filtered.length === 0) {
-    els.serverList.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">${t('emptyList')}</td></tr>`;
+    els.serverList.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">${t('emptyList')}</td></tr>`;
     return;
   }
 
@@ -273,56 +399,88 @@ function renderList() {
       }
     }
     
+    // Construct the flag URL using the tweakable template
+    const flagUrl = FLAG_BASE_URL_TEMPLATE.replace('{CODE}', s.country_short.toLowerCase());
+
     tr.innerHTML = `
       <td class="status-col" title="${title}"><span class="status-dot ${statusClass}">${statusIcon}</span></td>
       <td class="country-col">
-          <img loading="lazy" src="https://flagcdn.com/w20/${s.country_short.toLowerCase()}.png" alt="${s.country_short}" class="flag" onerror="this.style.display='none'">
+          <img loading="lazy" src="${flagUrl}" alt="${s.country_short}" class="flag" onerror="this.style.display='none'">
           ${s.country}
       </td>
       <td>${s.speed_mbps} Mbps</td>
       <td>${s.tested ? s.test_ping : s.ping} ms</td>
-      <td>${s.sessions}</td>
-      <td>${s.score}</td>
-      <td>${s.name}</td>
+      <td class="hide-mobile">${s.sessions}</td>
     `;
+    
+    const detailsRow = document.createElement("tr");
+    detailsRow.className = "server-details-row";
+    if (idx === selectedIndex) {
+      detailsRow.classList.add("visible");
+    }
+    detailsRow.innerHTML = `
+      <td colspan="5" class="server-details-cell">
+        <div class="server-details-content">
+          <pre class="info">${buildInfo(s, t)}</pre>
+          <div class="actions">
+             <button class="btn btn-test-mobile">
+              <span class="btn-text">${t('btnTest')}</span>
+              <span class="spinner" style="display: none;"></span>
+            </button>
+            <button class="btn btn-download-mobile">${t('btnDownload')}</button>
+            ${isVpnPluginAvailable ? `<button class="btn primary btn-connect-mobile">${t('btnConnect')}</button>` : ''}
+          </div>
+          <div class="connection-status"></div>
+        </div>
+      </td>
+    `;
+    detailsRow.dataset.serverIp = s.ip;
+    
+    detailsRow.querySelector('.btn-test-mobile').addEventListener('click', (e) => {
+        e.stopPropagation();
+        testSelectedServer();
+    });
+    
+    detailsRow.querySelector('.btn-download-mobile').addEventListener('click', (e) => {
+        e.stopPropagation();
+        downloadSelectedConfig();
+    });
+
+    const connectBtn = detailsRow.querySelector('.btn-connect-mobile');
+    if (connectBtn) {
+        connectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            connectSelected();
+        });
+    }
+
 
     tr.addEventListener("click", () => selectIndex(idx));
     fragment.appendChild(tr);
+    fragment.appendChild(detailsRow);
   });
   els.serverList.appendChild(fragment);
+  updateConnectionStatusUI();
 }
 
 function updateInfo() {
-  if (selectedIndex < 0 || selectedIndex >= filtered.length) {
-    els.info.textContent = t('selectServer');
-    els.download.disabled = true;
-    els.testSelected.disabled = true;
-    return;
-  }
-  const s = filtered[selectedIndex];
-  els.info.textContent = buildInfo(s, t);
-  els.download.disabled = false;
-  els.testSelected.disabled = false;
-  
-  if (window.innerWidth <= 768) {
-    dom.sidebar.classList.add('visible');
-    dom.mobileScrim.classList.add('visible');
-    
-    // Scroll to the selected server in the table if it's not visible
-    const selectedRow = document.querySelector('.servers-table tbody tr.selected');
-    if (selectedRow) {
-      // Use smooth scrolling to bring the selected row into view
-      selectedRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
+  // This function is now a no-op as the info panel is removed.
+  // The logic is handled directly within renderList().
 }
 
 function selectIndex(idx) {
-  if (idx === selectedIndex && window.innerWidth <= 768 && dom.sidebar.classList.contains('visible')) {
-    hideMobileInfo();
-    return;
+  // If clicking the same row, toggle it off.
+  if (selectedIndex === idx) {
+    selectedIndex = -1;
+  } else {
+    selectedIndex = idx;
   }
-  selectedIndex = idx;
+  
+  const isDifferentServer = connectedState.serverName !== (filtered[selectedIndex] ? filtered[selectedIndex].name : null);
+  if (connectedState.status !== 'disconnected' && isDifferentServer) {
+    disconnect();
+  }
+
   renderList();
   updateInfo();
 }
@@ -342,8 +500,15 @@ function applyFiltersAndSort() {
   // Try to find the selected server in the new filtered list
   if (selectedServer) {
       selectedIndex = filtered.findIndex(s => s.ip === selectedServer.ip && s.port === selectedServer.port && s.proto === selectedServer.proto);
+  } else if (connectedState.serverName) {
+      selectedIndex = filtered.findIndex(s => s.name === connectedState.serverName);
   } else {
       selectedIndex = -1;
+  }
+  
+  // If we are "connected" to a server that is now filtered out, reset connection state.
+  if (connectedState.serverName && selectedIndex === -1) {
+      disconnect();
   }
   
   renderList();
@@ -356,12 +521,15 @@ function applyFiltersAndSort() {
 async function loadServers() {
   try {
     els.refresh.disabled = true;
-    els.download.disabled = true;
     els.testAll.disabled = true;
-    els.testSelected.disabled = true;
     setStatus(t('statusLoading'));
     setProgress(0);
     log(t('logLoading'));
+    
+    if (connectedState.status !== 'disconnected') {
+        await disconnect();
+    }
+    
     servers = await fetchServers(setProgress);
     setProgress(100);
     setStatus(t('statusLoaded', servers.length));
@@ -372,13 +540,6 @@ async function loadServers() {
     els.countryFilter.innerHTML = `<option value="">${t('filterCountryAll')}</option>` +
     countries.map(c => `<option value="${c}" ${c === currentCountry ? 'selected' : ''}>${c}</option>`).join("");
     
-    // After loading, if a server was selected, the info might be stale.
-    // Let's re-select to update info, or clear if it's gone.
-    const reselected = selectedIndex > -1 && filtered[selectedIndex] ? filtered[selectedIndex] : null;
-    if (!reselected) {
-        selectedIndex = -1;
-        hideMobileInfo();
-    }
     applyFiltersAndSort();
     
   } catch (e) {
@@ -393,6 +554,7 @@ async function loadServers() {
 async function testSelectedServer() {
   if (selectedIndex < 0) return;
   const server = filtered[selectedIndex];
+  if (server.testing) return; // Prevent re-testing
   await testServer(server);
   applyFiltersAndSort();
 }
@@ -441,42 +603,70 @@ async function runBatchTest(serversToTest, threads = 5) {
     stopBatchTest = false;
 }
 
-function setTestButtonState(testing) {
-    const textEl = els.testSelected.querySelector('.btn-text');
-    const spinnerEl = els.testSelected.querySelector('.spinner');
-    if (testing) {
-        els.testSelected.disabled = true;
-        textEl.style.display = 'none';
-        spinnerEl.style.display = 'inline-block';
-    } else {
-        els.testSelected.disabled = selectedIndex < 0;
-        textEl.style.display = 'inline-block';
-        spinnerEl.style.display = 'none';
+function setTestButtonState(server, testing) {
+    const mobileBtn = document.querySelector(`.server-details-row[data-server-ip="${server.ip}"] .btn-test-mobile`);
+
+    if (mobileBtn) {
+        const mobileText = mobileBtn.querySelector('.btn-text');
+        const mobileSpinner = mobileBtn.querySelector('.spinner');
+        if (testing) {
+            mobileBtn.disabled = true;
+            if (mobileText) mobileText.style.display = 'none';
+            if (mobileSpinner) mobileSpinner.style.display = 'inline-block';
+        } else {
+            mobileBtn.disabled = false;
+            if (mobileText) mobileText.style.display = 'inline-block';
+            if (mobileSpinner) mobileSpinner.style.display = 'none';
+        }
     }
 }
 
+
+// В функции testServer в app.js заменим вызов тестера:
+
 async function testServer(server, batchMode = false) {
   if (!batchMode) {
-      setStatus(t('statusTestingServer', server.name));
-      setTestButtonState(true);
+    setStatus(t('statusTestingServer', server.name));
+    setTestButtonState(server, true);
   }
   server.testing = true;
   if (!batchMode) applyFiltersAndSort();
 
   els.testAll.disabled = true;
-  
-  const timeout = 10; // Default timeout
-  
+
+  const timeout = testTimeoutSeconds;
+
   try {
-    const tester = testServerConnection(server.ip, server.port, server.proto, timeout);
+    // Используем реальное OpenVPN тестирование если доступен плагин
+    let tester;
+    if (isVpnPluginAvailable && server.config_base64) {
+      tester = testServerConnection(server.ip, server.port, server.proto, timeout, server.config_base64);
+    } else {
+      // Fallback к старому методу
+      tester = testServerConnection(server.ip, server.port, server.proto, timeout);
+    }
+
     currentTest = tester;
     const result = await tester.test();
-    
+
     server.tested = true;
     server.available = result.success;
     server.test_ping = result.ping;
-    
-    const message = t(`test_${result.reasonKey}`) || result.reasonKey;
+
+    // Обновим тексты результатов
+    const resultMessages = {
+      'available': t('test_available'),
+      'available_udp': t('test_available_udp'),
+      'unavailable': t('test_unavailable'),
+      'timeout': t('test_timeout'),
+      'openvpn_connected': '✅ OpenVPN подключение успешно',
+      'openvpn_failed': '❌ OpenVPN подключение не удалось',
+      'openvpn_timeout': '❌ Таймаут OpenVPN подключения',
+      'openvpn_error': '❌ Ошибка OpenVPN',
+      'no_plugin': '⚠️ Плагин OpenVPN недоступен'
+    };
+
+    const message = resultMessages[result.reasonKey] || result.reasonKey;
 
     if (result.success) {
       let qualityKey = result.ping < 100 ? 'quality_excellent' : result.ping < 200 ? 'quality_good' : 'quality_slow';
@@ -492,8 +682,8 @@ async function testServer(server, batchMode = false) {
   } finally {
     server.testing = false;
     if (!batchMode) {
-        setStatus(t('statusTestingDone'));
-        setTestButtonState(false);
+      setStatus(t('statusTestingDone'));
+      setTestButtonState(server, false);
     }
     els.testAll.disabled = false;
     currentTest = null;
@@ -501,9 +691,10 @@ async function testServer(server, batchMode = false) {
   }
 }
 
-function downloadSelected() {
+async function downloadSelectedConfig() {
   if (selectedIndex < 0) return;
   const server = filtered[selectedIndex];
+  
   if (server.tested) {
     if (!server.available) {
       if (!confirm(t('confirmUnavailable', server.name))) return;
@@ -511,6 +702,7 @@ function downloadSelected() {
       if (!confirm(t('confirmSlow', server.name, server.test_ping))) return;
     }
   }
+
   try {
     setStatus(t('statusCreatingConfig', server.name));
     log(t('logCreatingConfig', server.name));
@@ -523,6 +715,123 @@ function downloadSelected() {
     setStatus(t('statusErrorConfig'));
   }
 }
+
+async function connectSelected() {
+  if (selectedIndex < 0) return;
+  const server = filtered[selectedIndex];
+
+  if (connectedState.serverName && connectedState.serverName === server.name) {
+    await disconnect();
+    return;
+  }
+
+  if (connectedState.serverName) {
+    await disconnect();
+  }
+  
+  if (!isVpnPluginAvailable) {
+      log(t('logVpnPluginUnavailable'));
+      alert(t('logVpnPluginUnavailable'));
+      return;
+  }
+  
+  // Pre-connection checks
+  if (server.tested) {
+    if (!server.available) {
+      if (!confirm(t('confirmUnavailable', server.name))) return;
+    } else if (server.test_ping > 300) {
+      if (!confirm(t('confirmSlow', server.name, server.test_ping))) return;
+    }
+  }
+
+  try {
+      log(t('logVpnConnecting', server.name));
+      setConnectionState(server.name, 'connecting');
+      await vpnService.connect(server.config_base64, server.name);
+  } catch (e) {
+      log(t('logLoadError', e.message || e));
+      setStatus(t('statusErrorConfig'));
+      setConnectionState(server.name, 'error');
+  }
+}
+
+async function disconnect() {
+    if (connectedState.timer) clearTimeout(connectedState.timer);
+    
+    if (isVpnPluginAvailable && vpnService.isVPNConnected()) {
+        await vpnService.disconnect();
+    } else {
+        // For non-plugin environments or if the service status wasn't 'connected'
+        const lastConnectedServerName = connectedState.serverName;
+        setConnectionState(null, 'disconnected');
+        if (lastConnectedServerName) {
+            const lastIndex = filtered.findIndex(s => s.name === lastConnectedServerName);
+            if (lastIndex !== -1 && lastIndex === selectedIndex) {
+                updateConnectionStatusUI();
+            }
+        }
+    }
+}
+
+function setConnectionState(serverName, status) {
+    connectedState.serverName = serverName;
+    connectedState.status = status;
+    updateConnectionStatusUI();
+}
+
+function updateConnectionStatusUI() {
+    if (selectedIndex < 0) return;
+
+    const server = filtered[selectedIndex];
+    const detailsRow = els.serverList.querySelector(`tr[data-index="${selectedIndex}"] + .server-details-row`);
+    if (!detailsRow) return;
+
+    const statusEl = detailsRow.querySelector('.connection-status');
+    const connectBtn = detailsRow.querySelector('.btn-connect-mobile');
+    const downloadBtn = detailsRow.querySelector('.btn-download-mobile');
+    
+    if (!statusEl || !downloadBtn) return;
+
+    const isCurrentServerConnected = connectedState.serverName && connectedState.serverName === server.name;
+
+    if (isCurrentServerConnected && connectBtn) {
+        statusEl.className = `connection-status visible ${connectedState.status}`;
+        let statusTextKey = `status${connectedState.status.charAt(0).toUpperCase() + connectedState.status.slice(1)}`;
+        statusEl.textContent = t(statusTextKey) || connectedState.status;
+
+        switch (connectedState.status) {
+            case 'connecting':
+            case 'reconnecting':
+            case 'auth':
+                connectBtn.textContent = t('btnDisconnect');
+                connectBtn.disabled = true;
+                downloadBtn.disabled = true;
+                break;
+            case 'connected':
+                connectBtn.textContent = t('btnDisconnect');
+                connectBtn.disabled = false;
+                downloadBtn.disabled = true;
+                break;
+            case 'error':
+            case 'disconnected':
+            default:
+                statusEl.className = connectedState.status === 'disconnected' ? 'connection-status' : statusEl.className;
+                connectBtn.textContent = t('btnConnect');
+                connectBtn.disabled = false;
+                downloadBtn.disabled = false;
+                break;
+        }
+    } else {
+        // Not connected to this server, or plugin is unavailable (connectBtn might be null)
+        statusEl.className = 'connection-status';
+        if (connectBtn) {
+            connectBtn.textContent = t('btnConnect');
+            connectBtn.disabled = false;
+        }
+        downloadBtn.disabled = false;
+    }
+}
+
 
 function restoreSettings() {
   try {
@@ -542,7 +851,7 @@ function restoreSettings() {
   }
   const savedLang = localStorage.getItem('vpngate-lang');
   currentLang = savedLang || (navigator.language || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
-  document.getElementById('lang').value = currentLang;
+  els.lang.value = currentLang;
 
   updateSourcesUI();
 }
@@ -588,15 +897,28 @@ function applyI18nStatic() {
   els.testAll.textContent = t('btnTestAll');
   els.stopTest.textContent = t('btnStop');
   els.status.textContent = t('ready');
-  document.querySelector('.advanced-settings summary').textContent = t('settingsSources');
-  document.querySelector('label.block:nth-of-type(1)').firstChild.textContent = t('apiUrl') + ' ';
-  document.querySelector('label.block:nth-of-type(2)').firstChild.textContent = t('mirrors') + ' ';
-  document.querySelector('label.block:nth-of-type(3)').firstChild.textContent = t('threads') + ' ';
+  
+  // Navigation
+  els.navLogs.textContent = t('navLogs');
+  els.navSettings.textContent = t('navSettings');
+  els.backBtns.forEach(btn => btn.innerHTML = `&larr; ${t('btnBack')}`);
+  
+  // Settings page
+  document.getElementById('i18n-settings-title').textContent = t('settingsTitle');
+  document.getElementById('i18n-settings-general').textContent = t('settingsGeneral');
+  document.getElementById('i18n-settings-sources').textContent = t('settingsSources');
+  document.querySelector('#settings-view label.block span#i18n-threads-label').textContent = t('threads');
+  document.querySelector('#settings-view label.block:nth-of-type(1) span').textContent = t('apiUrl') + ' ';
+  document.querySelector('#settings-view label.block:nth-of-type(2) span').textContent = t('mirrors') + ' ';
   els.saveSources.textContent = t('save');
   els.resetSources.textContent = t('reset');
   els.enableSourcesLabel.textContent = t('enableSources');
+  document.getElementById('apiUrlLabel').textContent = t('apiUrl') + ' ';
+  document.getElementById('mirrorsLabel').textContent = t('mirrors') + ' ';
+  
+  // Log page
+  document.getElementById('i18n-log-header-page').textContent = t('logTitle');
   els.clearLog.textContent = t('clearLog');
-  document.getElementById('closeInfo')?.setAttribute('aria-label', t('close'));
   
   applyI18nDynamic();
 }
@@ -622,57 +944,28 @@ function applyI18nDynamic() {
 
   // Section headers
   document.getElementById('i18n-servers-list-header').textContent = t('serversList');
-  document.getElementById('i18n-log-header').textContent = t('logTitle');
-  document.getElementById('i18n-info-header').textContent = t('infoTitle');
-  // Buttons in info card
-  els.testSelected.querySelector('.btn-text').textContent = t('btnTest');
-  els.download.textContent = t('btnDownload');
+  
   // Table headers
   const ths = document.querySelectorAll('.servers-table thead th');
-  if (ths.length >= 7) {
+  if (ths.length >= 5) {
     ths[1].textContent = t('thCountry');
     ths[2].textContent = t('thSpeed');
     ths[3].textContent = t('thPing');
     ths[4].textContent = t('thSessions');
-    ths[5].textContent = t('thScore');
-    ths[6].textContent = t('thName');
   }
-  // Lang label
-  document.getElementById('i18n-lang-label').textContent = t('langLabel');
-}
+  ths.forEach(th => {
+      if (th.dataset.sort === 'sessions') {
+        th.classList.add('hide-mobile');
+      }
+  });
 
-function hideMobileInfo() {
-    if (window.innerWidth <= 768) {
-        dom.sidebar.classList.remove('visible');
-        dom.mobileScrim.classList.remove('visible');
-    }
-    const currentSelected = document.querySelector('.servers-table tr.selected');
-    if (currentSelected) {
-      currentSelected.classList.remove('selected');
-    }
-    // Don't fully deselect, just hide panel. Re-clicking will show it again.
-    // selectedIndex = -1;
-    // updateInfo();
+  // Lang label
+  document.querySelector('#settings-view #i18n-lang-label').textContent = t('langLabel');
 }
 
 function bindEvents() {
   els.refresh.addEventListener("click", loadServers);
-  els.download.addEventListener("click", downloadSelected);
-  els.testSelected.addEventListener("click", testSelectedServer);
   els.testAll.addEventListener("click", testAllServers);
-  
-  // Handle window resize to adjust mobile layout
-  window.addEventListener('resize', () => {
-    // If we're switching from mobile to desktop view, ensure sidebar is visible
-    if (window.innerWidth > 768) {
-      dom.sidebar.classList.remove('visible');
-      dom.mobileScrim.classList.remove('visible');
-    } else if (selectedIndex >= 0 && !dom.sidebar.classList.contains('visible')) {
-      // If we're on mobile and sidebar was hidden, show it if needed
-      dom.sidebar.classList.add('visible');
-      dom.mobileScrim.classList.add('visible');
-    }
-  });
   els.stopTest.addEventListener('click', () => {
     stopBatchTest = true;
     if (currentTest) {
@@ -729,19 +1022,75 @@ function bindEvents() {
   });
   els.threads.addEventListener("change", saveSettings);
   
-  document.getElementById('lang').addEventListener('change', (e) => {
+  els.lang.addEventListener('change', (e) => {
     currentLang = e.target.value;
     localStorage.setItem('vpngate-lang', currentLang);
     applyI18nStatic();
     applyFiltersAndSort(); // This re-renders everything with new text
   });
 
-  dom.mobileScrim.addEventListener('click', hideMobileInfo);
-  document.getElementById('closeInfo')?.addEventListener('click', hideMobileInfo);
+  // Navigation events
+  els.navSettings.addEventListener('click', () => navigate('settings-view'));
+  els.navLogs.addEventListener('click', () => navigate('log-view'));
+  els.backBtns.forEach(btn => {
+    btn.addEventListener('click', () => navigate('main-view'));
+  });
+}
+
+function handleVpnStatusChange(event) {
+    const { status, configName } = event.detail;
+    log(t('logVpnStatus', status));
+    if (configName) {
+        setConnectionState(configName, status);
+    } else if (status === 'disconnected' || status === 'error') {
+        setConnectionState(null, status);
+    }
+}
+
+function handleVpnLog(event) {
+    const { level, message } = event.detail;
+    log(t('logVpnLog', level, message));
+}
+
+function applyDesignTweaks() {
+  document.documentElement.style.setProperty('--radius', `${uiRadiusPx}px`);
+  document.documentElement.style.setProperty('--card-alpha', String(uiCardAlpha));
+  document.documentElement.style.setProperty('--anim-fast-ms', `${uiAnimFastMs}ms`);
+  document.body.classList.toggle('has-backdrop', !!enableBackdrop);
+  document.body.classList.toggle('compact', !!enableCompactMode);
+  if (enableCompactMode) {
+    document.documentElement.style.setProperty('--font-scale', String(compactScale));
+    document.documentElement.style.setProperty('--cell-pad', `${compactCellPaddingPx}px`);
+  }
+  const mq = window.matchMedia('(max-width: 576px)');
+  const applyMobileScale = () => {
+    const isMobile = mq.matches && mobileCompactEnabled;
+    const scale = isMobile ? mobileFontScale : (enableCompactMode ? compactScale : 1);
+    document.documentElement.style.setProperty('--font-scale', String(scale));
+    document.documentElement.style.setProperty('--cell-pad', `${isMobile ? mobileCellPadPx : compactCellPaddingPx}px`);
+    document.documentElement.style.setProperty('--flag-size', `${isMobile ? mobileFlagPx : 20}px`);
+    document.documentElement.style.setProperty('--btn-pad-y', `${isMobile ? mobileButtonPad.y : 10}px`);
+    document.documentElement.style.setProperty('--btn-pad-x', `${isMobile ? mobileButtonPad.x : 16}px`);
+    document.documentElement.style.setProperty('--layout-pad', `${isMobile ? mobilePaddings.layout : 24}px`);
+    document.documentElement.style.setProperty('--layout-pad-mobile', `${mobilePaddings.layout}px`);
+    document.documentElement.style.setProperty('--card-pad', `${isMobile ? mobilePaddings.card : 20}px`);
+    document.documentElement.style.setProperty('--header-gap', `${isMobile ? mobilePaddings.headerGap : 24}px`);
+    const subtitleEl = document.querySelector('.subtitle');
+    if (subtitleEl) subtitleEl.style.display = isMobile && mobileHideSubtitle ? 'none' : '';
+
+    // Hide or show "Test all" button on very small screens based on tweakable flag
+    if (hideTestAllOnMobile && isMobile) {
+      els.testAll.style.display = 'none';
+    } else {
+      els.testAll.style.display = '';
+    }
+  };
+  mq.addEventListener?.('change', applyMobileScale);
+  applyMobileScale();
 }
 
 // Init
-(function init() {
+(async function init() {
   restoreSettings();
   applyI18nStatic();
   try {
@@ -750,7 +1099,15 @@ function bindEvents() {
   } catch (e) {
     console.error("Error applying sources:", e);
   }
+
+  vpnService = new OpenVPNService();
+  isVpnPluginAvailable = await vpnService.initialize();
+  applyDesignTweaks();
+
   bindEvents();
+  document.addEventListener('vpnConnectionStatus', handleVpnStatusChange);
+  document.addEventListener('vpnConnectionLog', handleVpnLog);
+  
   updateSortHeaders();
   loadServers();
 })();
